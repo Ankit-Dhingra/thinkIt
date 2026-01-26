@@ -1,11 +1,14 @@
 const express = require("express");
 const userModel = require("../models/user");
+const otpModel = require("../models/otp");
 const authRouter = express.Router();
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 const { successResponse, errorResponse } = require("../utils/response");
 const { authMiddleware } = require("../middlewares/authMiddleware");
 const { generateAccessAndRefreshToken } = require("../utils/token");
 const { cookieOptions } = require("../utils/constant");
+const { generateOTP, generateOtpHash } = require("../utils/generateOTP");
 
 authRouter.get("/health", (req, res) => {
   res.send("okay");
@@ -124,6 +127,118 @@ authRouter.post("/logout", authMiddleware, async (req, res) => {
 
 authRouter.get("/me", authMiddleware, async (req, res) => {
   return successResponse(res, 200, "User fetched successfully", req.user);
+});
+
+authRouter.post("/request-otp", async (req, res) => {
+  try {
+    const { email, purpose } = req.body;
+    const existUser = await userModel.findOne({ email });
+
+    if (!email) {
+      return errorResponse(res, 400, "Email is required");
+    }
+
+    if (!["signup", "login", "reset"].includes(purpose)) {
+      return errorResponse(res, 400, "Invalid purpose");
+    }
+    // Commented for testing
+    // if (purpose == "signup" && existUser) {
+    //   return errorResponse(res, 400, "User already exists");
+    // }
+
+    if (purpose == "login" && !existUser) {
+      return errorResponse(res, 400, "User not exists");
+    }
+    // resend protection
+    const existingOtp = await otpModel.findOne({ identifier: email, purpose });
+
+    if (existingOtp) {
+      const secondsPassed =
+        (Date.now() - existingOtp.updatedAt.getTime()) / 1000;
+
+      if (secondsPassed < 30) {
+        const wait = Math.ceil(30 - secondsPassed);
+        return errorResponse(res, 429, `Wait ${wait}s before resending OTP`);
+      }
+    }
+    const otp = generateOTP();
+
+    const hashOtp = await generateOtpHash(otp);
+
+    const otpData = {
+      identifier: email,
+      purpose,
+      channel: "email",
+      otpHash: hashOtp,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      attempts: 0,
+    };
+
+    await otpModel.findOneAndUpdate({ identifier: email, purpose }, otpData, {
+      upsert: true,
+      new: true,
+    });
+
+    return successResponse(res, 200, "OTP generated successfully", otp);
+  } catch (error) {
+    console.log("Error in generating otp :".error);
+    return errorResponse(res, 400, "Something went wrong");
+  }
+});
+
+authRouter.post("/verify-otp", async (req, res) => {
+  try {
+    const { email, otp, purpose } = req.body;
+    if (!email || !otp || !purpose) {
+      return errorResponse(res, 400, "Missing fields");
+    }
+
+    if (otp.length !== 6) {
+      return errorResponse(res, 400, "Invalid OTP format");
+    }
+    const savedOtp = await otpModel.findOne({ identifier: email, purpose });
+    if (!savedOtp) {
+      return errorResponse(res, 404, "OTP not found or expired");
+    }
+
+    if (savedOtp.expiresAt < Date.now()) {
+      return errorResponse(res, 400, "OTP expired");
+    }
+
+    if (savedOtp.attempts >= 5) {
+      return errorResponse(res, 429, "Too many wrong attempts");
+    }
+    const isMatch = await bcrypt.compare(otp, savedOtp.otpHash);
+    if (!isMatch) {
+      await otpModel.updateOne(
+        { _id: savedOtp._id },
+        { $inc: { attempts: 1 } },
+      );
+      return errorResponse(res, 400, "Incorrect OTP");
+    }
+    await otpModel.deleteOne({ _id: savedOtp._id });
+
+    // handle by purpose
+    if (purpose === "signup") {
+      await userModel.findOneAndUpdate(
+        { email },
+        { $set: { isEmailVerified: true } },
+      );
+    }
+
+    if (purpose === "login") {
+      // later: generate access + refresh token here
+    }
+
+    if (purpose === "reset") {
+      // later: allow password reset flow
+    }
+
+    return successResponse(res, 200, "OTP verified successfully");
+  } catch (error) {
+    console.log("Error in verifying OTP:", error);
+    return errorResponse(res, 500, "Something went wrong");
+  }
 });
 
 module.exports = authRouter;
