@@ -131,16 +131,27 @@ authRouter.get("/me", authMiddleware, async (req, res) => {
 
 authRouter.post("/request-otp", async (req, res) => {
   try {
-    const { email, purpose } = req.body;
-    const existUser = await userModel.findOne({ email });
+    const { email, purpose, mobile } = req.body;
+    const identifier = email || mobile;
 
-    if (!email) {
-      return errorResponse(res, 400, "Email is required");
+    if (!identifier) {
+      return errorResponse(res, 400, "Email or Mobile is required");
     }
 
     if (!["signup", "login", "reset"].includes(purpose)) {
       return errorResponse(res, 400, "Invalid purpose");
     }
+
+    let existUser;
+    if (purpose !== "reset") {
+
+      existUser = await userModel.findOne({
+        $or: [
+          { email: identifier }, { mobile: identifier }
+        ]
+      });
+    }
+
     // Commented for testing
     // if (purpose == "signup" && existUser) {
     //   return errorResponse(res, 400, "User already exists");
@@ -153,63 +164,80 @@ authRouter.post("/request-otp", async (req, res) => {
     const existingOtp = await otpModel.findOne({ identifier: email, purpose });
 
     if (existingOtp) {
-      const secondsPassed =
-        (Date.now() - existingOtp.updatedAt.getTime()) / 1000;
+      const diff = Date.now() - existingOtp.updatedAt.getTime();
 
-      if (secondsPassed < 30) {
-        const wait = Math.ceil(30 - secondsPassed);
-        return errorResponse(res, 429, `Wait ${wait}s before resending OTP`);
+      if (diff < 30 * 1000) {
+        return res.status(429).json({ message: "Wait 30 seconds" });
       }
     }
+
     const otp = generateOTP();
 
-    const hashOtp = await generateOtpHash(otp);
-
     const otpData = {
-      identifier: email,
+      identifier,
       purpose,
-      channel: "email",
-      otpHash: hashOtp,
+      channel: email ? "email" : "mobile",
+      otp: otp,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       attempts: 0,
     };
 
-    await otpModel.findOneAndUpdate({ identifier: email, purpose }, otpData, {
+    await otpModel.findOneAndUpdate({ identifier, purpose }, otpData, {
       upsert: true,
       new: true,
     });
 
     return successResponse(res, 200, "OTP generated successfully", otp);
   } catch (error) {
-    console.log("Error in generating otp :".error);
+    console.log("Error in generating otp :", error);
     return errorResponse(res, 400, "Something went wrong");
   }
 });
 
 authRouter.post("/verify-otp", async (req, res) => {
   try {
-    const { email, otp, purpose } = req.body;
-    if (!email || !otp || !purpose) {
-      return errorResponse(res, 400, "Missing fields");
+    const { email, purpose, mobile, otp } = req.body;
+    const identifier = email || mobile;
+
+    if (!identifier) {
+      return errorResponse(res, 400, "Email or Mobile is required");
     }
+
+    if (!otp) {
+      return errorResponse(res, 400, "Please provide OTP");
+    }
+
+    if (!["signup", "login", "reset"].includes(purpose)) {
+      return errorResponse(res, 400, "Invalid purpose");
+    }
+
+     let existUser = await userModel.findOne({
+        $or: [
+          { email: identifier }, { mobile: identifier }
+        ]
+      });
+
+    if (purpose !== "signup" && !existUser) {
+      return errorResponse(res, 404, "User not found");
+    }
+
 
     if (otp.length !== 6) {
       return errorResponse(res, 400, "Invalid OTP format");
     }
-    const savedOtp = await otpModel.findOne({ identifier: email, purpose });
+    const savedOtp = await otpModel.findOne({ identifier, purpose });
     if (!savedOtp) {
       return errorResponse(res, 404, "OTP not found or expired");
     }
 
-    if (savedOtp.expiresAt < Date.now()) {
+    if (savedOtp.expiresAt.getTime() < Date.now()) {
       return errorResponse(res, 400, "OTP expired");
     }
 
     if (savedOtp.attempts >= 5) {
       return errorResponse(res, 429, "Too many wrong attempts");
     }
-    const isMatch = await bcrypt.compare(otp, savedOtp.otpHash);
-    if (!isMatch) {
+    if (otp !== savedOtp.otp) {
       await otpModel.updateOne(
         { _id: savedOtp._id },
         { $inc: { attempts: 1 } },
@@ -219,10 +247,17 @@ authRouter.post("/verify-otp", async (req, res) => {
     await otpModel.deleteOne({ _id: savedOtp._id });
 
     // handle by purpose
-    if (purpose === "signup") {
+    if (purpose === "signup" && email) {
       await userModel.findOneAndUpdate(
         { email },
         { $set: { isEmailVerified: true } },
+      );
+    }
+
+    if (purpose === "signup" && mobile) {
+      await userModel.findOneAndUpdate(
+        { mobile },
+        { $set: { isMobileVerified: true } },
       );
     }
 

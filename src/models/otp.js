@@ -16,11 +16,11 @@ const otpSchema = new mongoose.Schema(
 
     channel: {
       type: String,
-      enum: ["email", "sms"],
+      enum: ["email", "mobile"],
       required: true,
     },
 
-    otpHash: {
+    otp: {
       type: String,
       required: true,
     },
