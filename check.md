@@ -1,5 +1,0 @@
-MONGO_USER = ThinkIt
-MONGO_PASS = ankit2002
-JWT_SECRET = auth
-JWT_REFRESH_SECRET = auth-backend
-NODE_ENV = dev

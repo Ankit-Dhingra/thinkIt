@@ -144,18 +144,15 @@ authRouter.post("/request-otp", async (req, res) => {
 
     let existUser;
     if (purpose !== "reset") {
-
       existUser = await userModel.findOne({
-        $or: [
-          { email: identifier }, { mobile: identifier }
-        ]
+        $or: [{ email: identifier }, { mobile: identifier }],
       });
     }
 
     // Commented for testing
-    // if (purpose == "signup" && existUser) {
-    //   return errorResponse(res, 400, "User already exists");
-    // }
+    if (purpose == "signup" && existUser) {
+      return errorResponse(res, 400, "User already exists");
+    }
 
     if (purpose == "login" && !existUser) {
       return errorResponse(res, 400, "User not exists");
@@ -211,16 +208,13 @@ authRouter.post("/verify-otp", async (req, res) => {
       return errorResponse(res, 400, "Invalid purpose");
     }
 
-     let existUser = await userModel.findOne({
-        $or: [
-          { email: identifier }, { mobile: identifier }
-        ]
-      });
+    let existUser = await userModel.findOne({
+      $or: [{ email: identifier }, { mobile: identifier }],
+    });
 
     if (purpose !== "signup" && !existUser) {
       return errorResponse(res, 404, "User not found");
     }
-
 
     if (otp.length !== 6) {
       return errorResponse(res, 400, "Invalid OTP format");
@@ -262,7 +256,12 @@ authRouter.post("/verify-otp", async (req, res) => {
     }
 
     if (purpose === "login") {
-      // later: generate access + refresh token here
+      const { accessToken, refreshToken } =
+        await generateAccessAndRefreshToken(user);
+      res.cookie("accessToken", accessToken, cookieOptions);
+      res.cookie("refreshToken", refreshToken, cookieOptions);
+
+      return successResponse(res, 200, "Logged in Successfully");
     }
 
     if (purpose === "reset") {
