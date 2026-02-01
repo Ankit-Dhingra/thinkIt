@@ -17,7 +17,7 @@ const authMiddleware = async (req, res, next) => {
         }
 
         const decode = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await userModel.findById(decode.id).select("-password");
+        const user = await userModel.findById(decode.id).select("-password -refreshToken");
         if (!user) return errorResponse(res, 401, "Unauthorized");
         req.user = user;
         next();

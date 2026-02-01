@@ -16,9 +16,12 @@ authRouter.get("/health", (req, res) => {
 
 authRouter.post("/signup", async (req, res) => {
   try {
-    const { firstName, lastName, email, password, mobile } = req.body;
-    if (!firstName || !lastName || !email || !password || !mobile) {
+    const { firstName, lastName, email, password, confirmPassword, mobile } = req.body;
+    if (!firstName || !lastName || !email || !password || !confirmPassword || !mobile) {
       return errorResponse(res, 400, "Please fill all the required fields");
+    }
+    if (password !== confirmPassword) {
+      return errorResponse(res, 400, "Passwords do not match");
     }
     const existUser = await userModel.findOne({
       $or: [{ email }, { mobile }],
@@ -33,13 +36,17 @@ authRouter.post("/signup", async (req, res) => {
       mobile,
     });
 
+    const userObj = user.toObject();
+    delete userObj.password;
+    delete userObj.refreshToken;
+
     const { accessToken, refreshToken } =
       await generateAccessAndRefreshToken(user);
 
     res.cookie("accessToken", accessToken, cookieOptions);
     res.cookie("refreshToken", refreshToken, cookieOptions);
 
-    return successResponse(res, 201, "User Created Successfully");
+    return successResponse(res, 201, "User Created Successfully", {user: userObj});
   } catch (error) {
     console.error("Signup error:", error);
     return errorResponse(res, 500, "Internal Server Error");
@@ -58,6 +65,10 @@ authRouter.post("/login", async (req, res) => {
       return errorResponse(res, 401, "Invalid email or password");
     }
 
+    const userObj = user.toObject();
+    delete userObj.password;
+    delete userObj.refreshToken;
+
     // Sign JWT
     const { accessToken, refreshToken } =
       await generateAccessAndRefreshToken(user);
@@ -65,7 +76,7 @@ authRouter.post("/login", async (req, res) => {
     res.cookie("accessToken", accessToken, cookieOptions);
     res.cookie("refreshToken", refreshToken, cookieOptions);
 
-    return successResponse(res, 200, "Logged in Successfully");
+    return successResponse(res, 200, "Logged in Successfully", {user: userObj});
   } catch (error) {
     console.error("Login error:", error);
     return errorResponse(res, 500, "Internal server error");
