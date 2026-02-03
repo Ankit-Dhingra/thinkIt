@@ -161,9 +161,9 @@ authRouter.post("/request-otp", async (req, res) => {
     }
 
     // Commented for testing
-    if (purpose == "signup" && existUser) {
-      return errorResponse(res, 400, "User already exists");
-    }
+    // if (purpose == "signup" && existUser) {
+    //   return errorResponse(res, 400, "User already exists");
+    // }
 
     if (purpose == "login" && !existUser) {
       return errorResponse(res, 400, "User not exists");
