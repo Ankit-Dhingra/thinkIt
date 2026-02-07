@@ -9,6 +9,7 @@ const { authMiddleware } = require("../middlewares/authMiddleware");
 const { generateAccessAndRefreshToken } = require("../utils/token");
 const { cookieOptions } = require("../utils/constant");
 const { generateOTP, generateOtpHash } = require("../utils/generateOTP");
+const { loginRateLimiter, otpLimiter } = require("../middlewares/rateLimiter");
 
 authRouter.get("/health", (req, res) => {
   res.send("okay");
@@ -16,8 +17,16 @@ authRouter.get("/health", (req, res) => {
 
 authRouter.post("/signup", async (req, res) => {
   try {
-    const { firstName, lastName, email, password, confirmPassword, mobile } = req.body;
-    if (!firstName || !lastName || !email || !password || !confirmPassword || !mobile) {
+    const { firstName, lastName, email, password, confirmPassword, mobile } =
+      req.body;
+    if (
+      !firstName ||
+      !lastName ||
+      !email ||
+      !password ||
+      !confirmPassword ||
+      !mobile
+    ) {
       return errorResponse(res, 400, "Please fill all the required fields");
     }
     if (password !== confirmPassword) {
@@ -46,14 +55,16 @@ authRouter.post("/signup", async (req, res) => {
     res.cookie("accessToken", accessToken, cookieOptions);
     res.cookie("refreshToken", refreshToken, cookieOptions);
 
-    return successResponse(res, 201, "User Created Successfully", {user: userObj});
+    return successResponse(res, 201, "User Created Successfully", {
+      user: userObj,
+    });
   } catch (error) {
     console.error("Signup error:", error);
     return errorResponse(res, 500, "Internal Server Error");
   }
 });
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", loginRateLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password)
@@ -76,7 +87,9 @@ authRouter.post("/login", async (req, res) => {
     res.cookie("accessToken", accessToken, cookieOptions);
     res.cookie("refreshToken", refreshToken, cookieOptions);
 
-    return successResponse(res, 200, "Logged in Successfully", {user: userObj});
+    return successResponse(res, 200, "Logged in Successfully", {
+      user: userObj,
+    });
   } catch (error) {
     console.error("Login error:", error);
     return errorResponse(res, 500, "Internal server error");
@@ -140,7 +153,7 @@ authRouter.get("/me", authMiddleware, async (req, res) => {
   return successResponse(res, 200, "User fetched successfully", req.user);
 });
 
-authRouter.post("/request-otp", async (req, res) => {
+authRouter.post("/request-otp", otpLimiter, async (req, res) => {
   try {
     const { email, purpose, mobile } = req.body;
     const identifier = email || mobile;
