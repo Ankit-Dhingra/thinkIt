@@ -2,10 +2,9 @@ const mongoose = require("mongoose");
 
 connectMongoDb = async (retries = 5) => {
   try {
-    await mongoose.connect(
-      `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@thinklit.wqdf09e.mongodb.net/thinkIt?appName=ThinklIt`,
-    );
-    console.log("MongoDB Connected Successfully");
+    const MONGO_URL = `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@thinklit.wqdf09e.mongodb.net/thinkIt?appName=ThinklIt`;
+    await mongoose.connect(MONGO_URL);
+    console.log("MongoDB Connected Successfully", MONGO_URL);
   } catch (error) {
     console.log("Error connection MongoDB :", error?.message);
     if (retries === 0) {

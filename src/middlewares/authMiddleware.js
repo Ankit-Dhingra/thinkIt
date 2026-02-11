@@ -10,7 +10,7 @@ const authMiddleware = async (req, res, next) => {
         // }
         // token = token.split(" ")[1];
         if (!token)
-            return errorResponse(res, 401, "Authorization token missing or invalid");
+            return errorResponse(res, 401, "TOKEN_NOT_FOUND");
 
         if (!process.env.JWT_SECRET) {
             throw new Error("JWT_SECRET not configured");
@@ -18,7 +18,7 @@ const authMiddleware = async (req, res, next) => {
 
         const decode = jwt.verify(token, process.env.JWT_SECRET);
         const user = await userModel.findById(decode.id).select("-password -refreshToken");
-        if (!user) return errorResponse(res, 401, "Unauthorized");
+        if (!user) return errorResponse(res, 401, "UNAUTHORIZED");
         req.user = user;
         next();
     } catch (error) {
