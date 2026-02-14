@@ -1,14 +1,13 @@
+require("dotenv").config(); 
 const express = require("express");
 const authRouter = require("./src/routes/auth");
+const productRouter = require("./src/routes/product");
 const app = express();
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-require("dotenv").config();
 const connectMongoDb = require("./src/connections/mongoDB");
 const { globalRateLimiter } = require("./src/middlewares/rateLimiter");
 const requestLogger = require("./src/middlewares/requestLogger");
-const { products } = require("./src/utils/product");
-const productRouter = require("./src/routes/product");
 const PORT = 5000;
 connectMongoDb();
 

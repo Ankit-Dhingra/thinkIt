@@ -18,7 +18,7 @@ const globalRateLimiter = rateLimiter({
 
 const loginRateLimiter = rateLimiter({
   windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 10,
+  max: 1000,
   keyGenerator: (req) => {
     const email = req.body.email?.toLowerCase().trim();
     if (email) return `login-email-${email}`;
